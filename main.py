@@ -112,15 +112,18 @@ def insert_code(conn: sqlite3.Connection, code: str, reward_type: Optional[str],
 # Notifiers (Discord / Slack)
 # ---------------------------
 
+REDEEM_URL = os.getenv("REDEEM_URL", "https://shift.gearboxsoftware.com/rewards")
+
 def notify_discord(code: str, reward: Optional[str], source: str, context: str):
     if not DISCORD_WEBHOOK_URL:
         return
-    # Send only the essentials
+    src_label = "Reddit" if source.lower().startswith("reddit:") else "Website"
     content = (
         f"**New Borderlands SHiFT Code**\n"
         f"**Code:** `{code}`\n"
         f"**Reward:** {reward or 'Unknown'}\n"
-        f"**Source:** {source}"
+        f"**Source:** {src_label}\n"
+        f"**Redeem:** {REDEEM_URL}"
     )
     payload = {"content": content}
     try:
