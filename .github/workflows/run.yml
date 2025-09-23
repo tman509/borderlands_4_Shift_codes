@@ -2,32 +2,33 @@ name: Run SHiFT Bot (daily)
 
 on:
   schedule:
-    - cron: "0 0 * * *"   # every day at 00:00 UTC
-  workflow_dispatch:      # enables the "Run workflow" button
+    - cron: "0 0 * * *"   # Run every day at 00:00 UTC (6 PM Denver during DST, 5 PM during Standard Time)
+  workflow_dispatch:        # Allows manual runs from the Actions tab
 
 permissions:
-  contents: write         # needed to commit the DB back
+  contents: read            # No need to write to repo since we aren't committing files
 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
+      # 1) Checkout your code
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
-          fetch-depth: 0        # allow rebase/merge
 
+      # 2) Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      # 3) Install dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # 4) Run the bot
       - name: Run bot
         env:
           DB_PATH: ./shift_codes.db
@@ -40,12 +41,10 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: python main.py
 
-      - name: Commit & push updated DB if changed
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git rebase origin/main || git rebase --abort
-          git add shift_codes.db
-          git diff --cached --quiet && echo "No DB changes" || git commit -m "Update shift_codes.db [skip ci]"
-          git push origin HEAD:main
+      # 5) Upload the database as a GitHub artifact instead of committing
+      - name: Upload shift_codes.db as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shift_codes-database
+          path: shift_codes.db
+          retention-days: 30  # Keep the DB for 30 days (you can increase if needed)
