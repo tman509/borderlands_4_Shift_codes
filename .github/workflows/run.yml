@@ -6,13 +6,13 @@ on:
   workflow_dispatch:        # Allows manual runs from the Actions tab
 
 permissions:
-  contents: read            # No need to write to repo since we aren't committing files
+  contents: read            # We no longer need write permissions
 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      # 1) Checkout your code
+      # 1) Checkout code
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -28,7 +28,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4) Run the bot
+      # 4) Download the most recent DB artifact if one exists
+      - name: Download latest shift_codes.db artifact
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: run.yml          # Name of this workflow file
+          name: shift_codes-database  # The artifact name
+          path: ./                    # Download it to the repo root
+          if_no_artifact_found: ignore
+
+      # 5) Run the bot using the latest DB
       - name: Run bot
         env:
           DB_PATH: ./shift_codes.db
@@ -39,12 +48,18 @@ jobs:
           REDDIT_SUBS: ${{ secrets.REDDIT_SUBS }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: python main.py
+        run: |
+          # If there is no previous DB, create an empty file
+          if [ ! -f shift_codes.db ]; then
+            echo "No previous DB found, creating a new one."
+            touch shift_codes.db
+          fi
+          python main.py
 
-      # 5) Upload the database as a GitHub artifact instead of committing
-      - name: Upload shift_codes.db as artifact
+      # 6) Upload the updated DB as a new artifact
+      - name: Upload updated shift_codes.db
         uses: actions/upload-artifact@v4
         with:
           name: shift_codes-database
           path: shift_codes.db
-          retention-days: 30  # Keep the DB for 30 days (you can increase if needed)
+          retention-days: 30   # Artifacts kept for 30 days
