@@ -2,42 +2,71 @@ name: Run SHiFT Bot (daily)
 
 on:
   schedule:
-    - cron: "0 0 * * *"   # Run every day at 00:00 UTC (6 PM Denver during DST, 5 PM during Standard Time)
-  workflow_dispatch:        # Allows manual runs from the Actions tab
+    - cron: "0 0 * * *"   # daily at 00:00 UTC
+  workflow_dispatch:
+    inputs:
+      reset_db:
+        description: "Reset DB before run?"
+        required: false
+        type: boolean
+        default: false
+      test_webhook:
+        description: "Send a Discord test message?"
+        required: false
+        type: boolean
+        default: false
+      test_message:
+        description: "Custom test message content"
+        required: false
+        default: "Test: SHiFT bot webhook is connected."
 
 permissions:
-  contents: read            # We no longer need write permissions
+  contents: read
 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      # 1) Checkout code
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2) Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # 3) Install dependencies
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4) Download the most recent DB artifact if one exists
-      - name: Download latest shift_codes.db artifact
+      - name: Download latest shift_codes.db artifact (if any)
+        if: ${{ inputs.reset_db != true }}   # skip download if resetting
         uses: dawidd6/action-download-artifact@v2
         with:
-          workflow: run.yml          # Name of this workflow file
-          name: shift_codes-database  # The artifact name
-          path: ./                    # Download it to the repo root
+          workflow: run.yml
+          name: shift_codes-database
+          path: ./
           if_no_artifact_found: ignore
 
-      # 5) Run the bot using the latest DB
+      - name: Reset DB (optional)
+        if: ${{ inputs.reset_db == true }}
+        run: |
+          echo "Reset requested: removing any existing DB"
+          rm -f shift_codes.db
+
+      - name: Send Discord test message (optional)
+        if: ${{ inputs.test_webhook == true }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "No DISCORD_WEBHOOK_URL secret set."
+            exit 0
+          fi
+          payload=$(printf '{"content":"%s"}' "${{ inputs.test_message }}")
+          curl -sS -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL"
+
       - name: Run bot
         env:
           DB_PATH: ./shift_codes.db
@@ -49,17 +78,15 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          # If there is no previous DB, create an empty file
           if [ ! -f shift_codes.db ]; then
-            echo "No previous DB found, creating a new one."
+            echo "No DB found; creating new empty DB."
             touch shift_codes.db
           fi
           python main.py
 
-      # 6) Upload the updated DB as a new artifact
-      - name: Upload updated shift_codes.db
+      - name: Upload updated DB
         uses: actions/upload-artifact@v4
         with:
           name: shift_codes-database
           path: shift_codes.db
-          retention-days: 30   # Artifacts kept for 30 days
+          retention-days: 30
