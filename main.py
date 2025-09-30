@@ -48,15 +48,33 @@ CODE_PATTERNS = [
 ]
 
 REWARD_KEYWORDS = {
-    "golden key": ["golden key", "gold keys", "keys", "gold key", "5 keys", "3 keys"],
-    "vault card": ["vault card", "vaultcard"],
-    "cosmetic": ["skin", "head", "cosmetic"],
-    "diamond key": ["diamond key"],
-    "weapon": ["weapon", "gun"],
-    "eridium": ["eridium"],
-    "xp": ["xp", "experience"],
-    "event": ["event", "limited time", "expires"],
+    "golden key": [
+        "golden key", "golden keys", "5 golden keys", "3 golden keys",
+        "gold key", "gold keys", "5 keys", "3 keys"
+    ],
+    "diamond key": [
+        "diamond key", "diamond keys"
+    ],
+    "vault card": [
+        "vault card", "vaultcard"
+    ],
+    "cosmetic": [
+        "cosmetic", "skin", "weapon skin", "head", "appearance", "outfit", "customization"
+    ],
+    "weapon": [
+        "weapon", "gun", "legendary weapon", "rare weapon"
+    ],
+    "eridium": [
+        "eridium"
+    ],
+    "xp": [
+        "xp", "experience"
+    ],
+    "event": [
+        "event", "limited time", "expires"
+    ]
 }
+
 
 def extract_codes(text: str) -> List[str]:
     found = set()
