@@ -15,6 +15,15 @@ on:
         required: false
         type: boolean
         default: false
+      max_notifications:
+        description: "Max individual notifications (5 = default, 0 = summary only)"
+        required: false
+        default: "5"
+      silent_mode:
+        description: "Run without any notifications (just collect codes)?"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -78,9 +87,10 @@ jobs:
           REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
           REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
           REDDIT_SUBS: ${{ secrets.REDDIT_SUBS }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ inputs.silent_mode == true && '' || secrets.DISCORD_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ inputs.silent_mode == true && '' || secrets.SLACK_WEBHOOK_URL }}
           REDEEM_URL: ${{ secrets.REDEEM_URL }}
+          MAX_CODES_PER_NOTIFICATION: ${{ inputs.max_notifications }}
         run: |
           echo "🚀 Starting SHiFT code bot..."
           python main_improved.py

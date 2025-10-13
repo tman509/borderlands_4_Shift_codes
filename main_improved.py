@@ -353,11 +353,21 @@ def notify_slack(code: str, reward: Optional[str], source: str, context: str):
         logger.error(f"Slack notification failed for {code}: {e}")
 
 def notify_all(new_items: List[Tuple[str, Optional[str], str, str]]):
-    """Send notifications for all new codes"""
+    """Send notifications for all new codes with spam prevention"""
     if not new_items:
         return
     
-    logger.info(f"Sending notifications for {len(new_items)} new codes")
+    # Check if this is likely a first run (too many codes found)
+    MAX_CODES_PER_NOTIFICATION = int(os.getenv("MAX_CODES_PER_NOTIFICATION", "5"))
+    
+    if len(new_items) > MAX_CODES_PER_NOTIFICATION:
+        logger.warning(f"Found {len(new_items)} new codes - this might be a first run or database reset")
+        
+        # Send summary notification instead of individual notifications
+        send_summary_notification(new_items)
+        return
+    
+    logger.info(f"Sending individual notifications for {len(new_items)} new codes")
     
     for code, reward, src, ctx in new_items:
         try:
@@ -367,6 +377,87 @@ def notify_all(new_items: List[Tuple[str, Optional[str], str, str]]):
             time.sleep(0.5)
         except Exception as e:
             logger.error(f"Notification failed for code {code}: {e}")
+
+def send_summary_notification(new_items: List[Tuple[str, Optional[str], str, str]]):
+    """Send a summary notification when too many codes are found"""
+    if not (DISCORD_WEBHOOK_URL or SLACK_WEBHOOK_URL):
+        return
+    
+    logger.info(f"Sending summary notification for {len(new_items)} codes")
+    
+    # Create summary
+    code_list = []
+    for code, reward, src, ctx in new_items[:10]:  # Show first 10
+        code_list.append(f"• `{code}` - {reward or 'Unknown'}")
+    
+    if len(new_items) > 10:
+        code_list.append(f"• ... and {len(new_items) - 10} more codes")
+    
+    codes_text = "\n".join(code_list)
+    
+    # Discord summary
+    if DISCORD_WEBHOOK_URL:
+        try:
+            content = (
+                f"🎮 **SHiFT Code Summary**\n"
+                f"Found **{len(new_items)} codes** (likely first run or database reset)\n\n"
+                f"**Recent Codes:**\n{codes_text}\n\n"
+                f"**Redeem:** {REDEEM_URL}\n"
+                f"**Note:** Individual notifications disabled to prevent spam"
+            )
+            
+            payload = {"content": content}
+            send_webhook(DISCORD_WEBHOOK_URL, payload)
+            logger.info("Discord summary notification sent")
+            
+        except Exception as e:
+            logger.error(f"Discord summary notification failed: {e}")
+    
+    # Slack summary
+    if SLACK_WEBHOOK_URL:
+        try:
+            blocks = [
+                {
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": f"🎮 SHiFT Code Summary ({len(new_items)} codes)",
+                        "emoji": True
+                    }
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"Found **{len(new_items)} codes** (likely first run or database reset)\n\n*Recent Codes:*\n{codes_text}"
+                    }
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "*Note:* Individual notifications disabled to prevent spam"
+                    }
+                },
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Redeem Codes"},
+                            "url": REDEEM_URL,
+                            "style": "primary"
+                        }
+                    ]
+                }
+            ]
+            
+            payload = {"blocks": blocks}
+            send_webhook(SLACK_WEBHOOK_URL, payload)
+            logger.info("Slack summary notification sent")
+            
+        except Exception as e:
+            logger.error(f"Slack summary notification failed: {e}")
 
 # ---------------------------
 # Fetchers with improvements
