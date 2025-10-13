@@ -14,11 +14,33 @@ from typing import Dict
 def check_database(db_path: str = "./shift_codes.db") -> Dict:
     """Check database connectivity and basic stats"""
     try:
+        import os
+        if not os.path.exists(db_path):
+            return {
+                "status": "warning",
+                "error": f"Database file not found at {db_path}",
+                "total_codes": 0,
+                "active_codes": 0,
+                "last_code_date": None
+            }
+        
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
         # Test basic connectivity
         cursor.execute("SELECT 1")
+        
+        # Check if codes table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='codes'")
+        if not cursor.fetchone():
+            conn.close()
+            return {
+                "status": "warning",
+                "error": "Database exists but codes table not found",
+                "total_codes": 0,
+                "active_codes": 0,
+                "last_code_date": None
+            }
         
         # Get stats
         cursor.execute("SELECT COUNT(*) FROM codes")
@@ -47,18 +69,28 @@ def check_database(db_path: str = "./shift_codes.db") -> Dict:
 def check_network() -> Dict:
     """Check network connectivity"""
     try:
-        # Test basic internet connectivity
-        response = requests.get("https://httpbin.org/status/200", timeout=10)
+        # Test basic internet connectivity with shorter timeout
+        response = requests.get("https://httpbin.org/status/200", timeout=5)
         response.raise_for_status()
         
-        # Test shift.gearboxsoftware.com
-        response = requests.get("https://shift.gearboxsoftware.com", timeout=10)
-        shift_status = "reachable" if response.status_code < 500 else "degraded"
+        # Test shift.gearboxsoftware.com with shorter timeout
+        try:
+            response = requests.get("https://shift.gearboxsoftware.com", timeout=5)
+            shift_status = "reachable" if response.status_code < 500 else "degraded"
+        except requests.exceptions.Timeout:
+            shift_status = "timeout"
+        except Exception:
+            shift_status = "unreachable"
         
         return {
             "status": "healthy",
             "internet": "ok",
             "shift_site": shift_status
+        }
+    except requests.exceptions.Timeout:
+        return {
+            "status": "warning",
+            "error": "Network timeout - connection may be slow"
         }
     except Exception as e:
         return {
@@ -69,10 +101,13 @@ def check_network() -> Dict:
 def check_configuration() -> Dict:
     """Check configuration validity"""
     try:
-        from dotenv import load_dotenv
         import os
-        
-        load_dotenv()
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            # python-dotenv not available, skip loading .env file
+            pass
         
         issues = []
         
