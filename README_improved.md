@@ -47,7 +47,7 @@ python3 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements_improved.txt
+pip install -r requirements.txt
 
 # Setup configuration
 cp .env.improved.example .env
@@ -111,8 +111,8 @@ python health_check.py --json
 FROM python:3.11-slim
 
 WORKDIR /app
-COPY requirements_improved.txt .
-RUN pip install -r requirements_improved.txt
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
 COPY . .
 RUN python migrate_db.py

@@ -24,21 +24,37 @@ except Exception:
 # Logging Setup
 # ---------------------------
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('bot.log'),
-        logging.StreamHandler()
-    ]
-)
+def setup_logging():
+    """Setup logging configuration"""
+    try:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler('bot.log'),
+                logging.StreamHandler()
+            ]
+        )
+    except Exception:
+        # Fallback to basic logging if file handler fails
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
+
+# Initialize logging
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # ---------------------------
 # Utilities & Config
 # ---------------------------
 
-load_dotenv()
+# Load environment variables (ignore if .env doesn't exist)
+try:
+    load_dotenv()
+except Exception:
+    pass
 
 DB_PATH = os.getenv("DB_PATH", "./shift_codes.db")
 
@@ -75,8 +91,8 @@ def retry(max_attempts=3, delay=1, backoff=2):
                     wait_time = delay * (backoff ** attempt)
                     logger.warning(f"Attempt {attempt + 1} failed for {func.__name__}: {e}. Retrying in {wait_time}s...")
                     time.sleep(wait_time)
-            return wrapper
-        return decorator
+        return wrapper
+    return decorator
 
 # ---------------------------
 # Configuration Validation
