@@ -1,0 +1,257 @@
+name: Bot Health Monitor
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"  # Every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health-monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_improved.txt
+
+      - name: Download latest database
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: run_improved.yml
+          name: shift_codes-database
+          path: ./
+          if_no_artifact_found: ignore
+
+      - name: Run comprehensive health check
+        id: health
+        env:
+          DB_PATH: ./shift_codes.db
+          HTML_SOURCES: ${{ secrets.HTML_SOURCES }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
+          REDDIT_SUBS: ${{ secrets.REDDIT_SUBS }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          echo "🔍 Running comprehensive health check..."
+          
+          # Run health check and capture output
+          python health_check.py --json > health_result.json
+          health_exit_code=$?
+          
+          # Parse results
+          status=$(python -c "import json; print(json.load(open('health_result.json'))['overall_status'])")
+          
+          echo "Health Status: $status"
+          echo "Exit Code: $health_exit_code"
+          
+          # Set outputs for next steps
+          echo "status=$status" >> $GITHUB_OUTPUT
+          echo "exit_code=$health_exit_code" >> $GITHUB_OUTPUT
+          
+          # Display detailed results
+          echo "📊 Detailed Health Check Results:"
+          cat health_result.json | python -m json.tool
+
+      - name: Check recent bot activity
+        id: activity
+        run: |
+          if [ -f shift_codes.db ]; then
+            echo "📈 Checking recent bot activity..."
+            
+            # Check when the last code was found
+            last_code_date=$(python -c "
+            import sqlite3
+            conn = sqlite3.connect('shift_codes.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT MAX(date_found_utc) FROM codes')
+            result = cursor.fetchone()[0]
+            conn.close()
+            print(result or 'Never')
+            ")
+            
+            # Check total codes
+            total_codes=$(python -c "
+            import sqlite3
+            conn = sqlite3.connect('shift_codes.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM codes')
+            result = cursor.fetchone()[0]
+            conn.close()
+            print(result)
+            ")
+            
+            echo "Last code found: $last_code_date"
+            echo "Total codes in database: $total_codes"
+            
+            # Set outputs
+            echo "last_code_date=$last_code_date" >> $GITHUB_OUTPUT
+            echo "total_codes=$total_codes" >> $GITHUB_OUTPUT
+            
+            # Check if it's been too long since last code (7 days)
+            if [ "$last_code_date" != "Never" ]; then
+              days_since=$(python -c "
+              from datetime import datetime, timezone
+              import sys
+              try:
+                  last = datetime.fromisoformat('$last_code_date'.replace('Z', '+00:00'))
+                  now = datetime.now(timezone.utc)
+                  days = (now - last).days
+                  print(days)
+              except:
+                  print(999)  # Error parsing date
+              ")
+              
+              echo "Days since last code: $days_since"
+              echo "days_since_last_code=$days_since" >> $GITHUB_OUTPUT
+              
+              if [ "$days_since" -gt 7 ]; then
+                echo "⚠️ Warning: No codes found in $days_since days"
+                echo "stale_data=true" >> $GITHUB_OUTPUT
+              else
+                echo "stale_data=false" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "stale_data=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "❌ No database found"
+            echo "last_code_date=Never" >> $GITHUB_OUTPUT
+            echo "total_codes=0" >> $GITHUB_OUTPUT
+            echo "stale_data=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate monitoring report
+        run: |
+          echo "# 🤖 SHiFT Bot Health Report" > monitoring_report.md
+          echo "" >> monitoring_report.md
+          echo "**Generated:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> monitoring_report.md
+          echo "" >> monitoring_report.md
+          
+          # Health status
+          echo "## 🏥 Health Status" >> monitoring_report.md
+          case "${{ steps.health.outputs.status }}" in
+            "healthy")
+              echo "✅ **Status:** Healthy" >> monitoring_report.md
+              ;;
+            "warning")
+              echo "⚠️ **Status:** Warning - Some issues detected" >> monitoring_report.md
+              ;;
+            "unhealthy")
+              echo "❌ **Status:** Unhealthy - Critical issues detected" >> monitoring_report.md
+              ;;
+          esac
+          echo "" >> monitoring_report.md
+          
+          # Activity metrics
+          echo "## 📊 Activity Metrics" >> monitoring_report.md
+          echo "- **Total codes in database:** ${{ steps.activity.outputs.total_codes }}" >> monitoring_report.md
+          echo "- **Last code found:** ${{ steps.activity.outputs.last_code_date }}" >> monitoring_report.md
+          
+          if [ "${{ steps.activity.outputs.days_since_last_code }}" != "" ]; then
+            echo "- **Days since last code:** ${{ steps.activity.outputs.days_since_last_code }}" >> monitoring_report.md
+          fi
+          echo "" >> monitoring_report.md
+          
+          # Recommendations
+          echo "## 💡 Recommendations" >> monitoring_report.md
+          if [ "${{ steps.health.outputs.status }}" = "unhealthy" ]; then
+            echo "- 🚨 **Immediate action required** - Check bot configuration and logs" >> monitoring_report.md
+            echo "- Review GitHub Actions secrets and environment variables" >> monitoring_report.md
+            echo "- Verify webhook URLs are still valid" >> monitoring_report.md
+          elif [ "${{ steps.activity.outputs.stale_data }}" = "true" ]; then
+            echo "- ⚠️ **No recent codes found** - This could be normal if no new codes are available" >> monitoring_report.md
+            echo "- Consider checking if sources are still active" >> monitoring_report.md
+            echo "- Verify bot is running on schedule" >> monitoring_report.md
+          else
+            echo "- ✅ **Everything looks good** - Bot is healthy and active" >> monitoring_report.md
+          fi
+          
+          # Display report
+          echo "📋 Monitoring Report:"
+          cat monitoring_report.md
+
+      - name: Send alert if unhealthy
+        if: ${{ steps.health.outputs.status == 'unhealthy' || steps.activity.outputs.stale_data == 'true' }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+            echo "🚨 Sending health alert..."
+            
+            # Determine alert level
+            if [ "${{ steps.health.outputs.status }}" = "unhealthy" ]; then
+              alert_level="🚨 CRITICAL"
+              color="15158332"  # Red
+            else
+              alert_level="⚠️ WARNING"
+              color="16776960"  # Yellow
+            fi
+            
+            # Create Discord embed
+            payload=$(cat << EOF
+          {
+            "embeds": [{
+              "title": "$alert_level: SHiFT Bot Health Alert",
+              "description": "The SHiFT code bot health monitor detected issues that require attention.",
+              "color": $color,
+              "fields": [
+                {
+                  "name": "Health Status",
+                  "value": "${{ steps.health.outputs.status }}",
+                  "inline": true
+                },
+                {
+                  "name": "Total Codes",
+                  "value": "${{ steps.activity.outputs.total_codes }}",
+                  "inline": true
+                },
+                {
+                  "name": "Last Code Found",
+                  "value": "${{ steps.activity.outputs.last_code_date }}",
+                  "inline": true
+                },
+                {
+                  "name": "Action Required",
+                  "value": "Check the [GitHub Actions logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.",
+                  "inline": false
+                }
+              ],
+              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+            }]
+          }
+          EOF
+            )
+            
+            curl -sS -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL"
+            echo "✅ Alert sent to Discord"
+          else
+            echo "⚠️ No Discord webhook configured for alerts"
+          fi
+
+      - name: Upload monitoring artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitoring-report-${{ github.run_number }}
+          path: |
+            health_result.json
+            monitoring_report.md
+          retention-days: 30
+
+      - name: Update job summary
+        run: |
+          echo "## 🤖 Bot Health Monitor Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          cat monitoring_report.md >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,221 @@
+name: Run SHiFT Bot (Improved)
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # Every 30 minutes for better coverage
+  workflow_dispatch:
+    inputs:
+      reset_db:
+        description: "Reset DB before run?"
+        required: false
+        type: boolean
+        default: false
+      test_webhook:
+        description: "Send test notifications?"
+        required: false
+        type: boolean
+        default: false
+      test_message:
+        description: "Custom test message content"
+        required: false
+        default: "🧪 Test: SHiFT bot webhook is connected and working!"
+      run_health_check:
+        description: "Run health check only?"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    outputs:
+      health-status: ${{ steps.health.outputs.status }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_improved.txt
+
+      - name: Download existing database
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: run_improved.yml
+          name: shift_codes-database
+          path: ./
+          if_no_artifact_found: ignore
+
+      - name: Run health check
+        id: health
+        env:
+          DB_PATH: ./shift_codes.db
+          HTML_SOURCES: ${{ secrets.HTML_SOURCES }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
+          REDDIT_SUBS: ${{ secrets.REDDIT_SUBS }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          echo "Running health check..."
+          python health_check.py --json > health_result.json
+          
+          # Extract status for job output
+          status=$(python -c "import json; print(json.load(open('health_result.json'))['overall_status'])")
+          echo "status=$status" >> $GITHUB_OUTPUT
+          
+          # Display results
+          echo "Health check results:"
+          cat health_result.json | python -m json.tool
+          
+          # Exit with appropriate code
+          if [ "$status" = "unhealthy" ]; then
+            echo "❌ Health check failed"
+            exit 2
+          elif [ "$status" = "warning" ]; then
+            echo "⚠️ Health check has warnings"
+            exit 1
+          else
+            echo "✅ Health check passed"
+            exit 0
+          fi
+
+      - name: Upload health check results
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-check-results
+          path: health_result.json
+          retention-days: 7
+
+  run-bot:
+    runs-on: ubuntu-latest
+    needs: health-check
+    if: ${{ needs.health-check.outputs.health-status != 'unhealthy' && inputs.run_health_check != true }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_improved.txt
+
+      - name: Download latest database
+        if: ${{ inputs.reset_db != true }}
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: run_improved.yml
+          name: shift_codes-database
+          path: ./
+          if_no_artifact_found: ignore
+
+      - name: Reset database (optional)
+        if: ${{ inputs.reset_db == true }}
+        run: |
+          echo "🗑️ Reset requested: removing existing database"
+          rm -f shift_codes.db
+
+      - name: Migrate database schema
+        run: |
+          echo "🔄 Running database migration..."
+          python migrate_db.py
+          echo "✅ Database migration completed"
+
+      - name: Send test notifications (optional)
+        if: ${{ inputs.test_webhook == true }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          echo "🧪 Sending test notifications..."
+          
+          # Test Discord
+          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+            payload=$(printf '{"content":"🧪 **GitHub Actions Test**\n%s\n**Time:** %s UTC"}' "${{ inputs.test_message }}" "$(date -u '+%Y-%m-%d %H:%M')")
+            curl -sS -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL"
+            echo "✅ Discord test sent"
+          else
+            echo "⚠️ No Discord webhook configured"
+          fi
+          
+          # Test Slack
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            payload='{"blocks":[{"type":"header","text":{"type":"plain_text","text":"🧪 GitHub Actions Test"}},{"type":"section","text":{"type":"mrkdwn","text":"'"${{ inputs.test_message }}"'\n*Time:* '"$(date -u '+%Y-%m-%d %H:%M')"' UTC"}}]}'
+            curl -sS -H "Content-Type: application/json" -X POST -d "$payload" "$SLACK_WEBHOOK_URL"
+            echo "✅ Slack test sent"
+          else
+            echo "⚠️ No Slack webhook configured"
+          fi
+
+      - name: Run SHiFT code bot
+        env:
+          DB_PATH: ./shift_codes.db
+          HTML_SOURCES: ${{ secrets.HTML_SOURCES }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
+          REDDIT_SUBS: ${{ secrets.REDDIT_SUBS }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          REDEEM_URL: ${{ secrets.REDEEM_URL }}
+        run: |
+          echo "🚀 Starting SHiFT code bot..."
+          python main_improved.py
+          echo "✅ Bot execution completed"
+
+      - name: Display execution metrics
+        run: |
+          if [ -f metrics.json ]; then
+            echo "📊 Execution Metrics:"
+            cat metrics.json | python -m json.tool
+          else
+            echo "⚠️ No metrics file generated"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shift_codes-database
+          path: |
+            shift_codes.db
+            bot.log
+            metrics.json
+          retention-days: 30
+
+      - name: Upload logs separately
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-logs-${{ github.run_number }}
+          path: |
+            bot.log
+            metrics.json
+          retention-days: 7
+
+  notify-failure:
+    runs-on: ubuntu-latest
+    needs: [health-check, run-bot]
+    if: ${{ failure() && github.event_name == 'schedule' }}
+    steps:
+      - name: Notify on failure
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+            payload='{"content":"🚨 **SHiFT Bot Failure Alert**\nThe scheduled bot run failed. Check the GitHub Actions logs for details.\n**Time:** '"$(date -u '+%Y-%m-%d %H:%M')"' UTC\n**Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+            curl -sS -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL"
+          fi
