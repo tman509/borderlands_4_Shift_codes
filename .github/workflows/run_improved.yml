@@ -129,6 +129,15 @@ jobs:
         run: |
           echo "🗑️ Reset requested: removing existing database"
           rm -f shift_codes.db
+          
+      - name: Check database status
+        run: |
+          if [ -f shift_codes.db ]; then
+            echo "✅ Database found - will check for duplicates"
+            sqlite3 shift_codes.db "SELECT COUNT(*) as total_codes FROM codes;" || echo "Database exists but may be empty"
+          else
+            echo "⚠️ No database found - this will be a fresh start (expect many codes)"
+          fi
 
       - name: Migrate database schema
         run: |
