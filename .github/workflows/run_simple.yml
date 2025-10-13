@@ -1,0 +1,120 @@
+name: Run SHiFT Bot (Simple)
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # Every 30 minutes
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: "Run in test mode (send test notification)?"
+        required: false
+        type: boolean
+        default: false
+      reset_db:
+        description: "Reset database before run?"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download existing database
+        if: ${{ inputs.reset_db != true }}
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: run_simple.yml
+          name: shift_codes-database
+          path: ./
+          if_no_artifact_found: ignore
+
+      - name: Reset database (if requested)
+        if: ${{ inputs.reset_db == true }}
+        run: |
+          echo "🗑️ Resetting database..."
+          rm -f shift_codes.db
+
+      - name: Run database migration
+        run: |
+          echo "🔄 Running database migration..."
+          python migrate_db.py || echo "Migration completed (or not needed)"
+
+      - name: Send test notification (if requested)
+        if: ${{ inputs.test_mode == true }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+            echo "🧪 Sending test notification..."
+            payload='{"content":"🧪 **Test Notification**\nSHiFT Bot is running from GitHub Actions!\n**Time:** '"$(date -u '+%Y-%m-%d %H:%M')"' UTC"}'
+            curl -sS -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL"
+            echo "✅ Test notification sent"
+          else
+            echo "⚠️ No Discord webhook configured"
+          fi
+
+      - name: Run SHiFT code bot
+        env:
+          DB_PATH: ./shift_codes.db
+          HTML_SOURCES: ${{ secrets.HTML_SOURCES }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
+          REDDIT_SUBS: ${{ secrets.REDDIT_SUBS }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          REDEEM_URL: ${{ secrets.REDEEM_URL }}
+        run: |
+          echo "🚀 Starting SHiFT code bot..."
+          python main_improved.py
+          echo "✅ Bot execution completed"
+
+      - name: Show execution results
+        run: |
+          echo "📊 Execution Results:"
+          if [ -f bot.log ]; then
+            echo "Last 10 lines of bot.log:"
+            tail -10 bot.log
+          fi
+          
+          if [ -f metrics.json ]; then
+            echo "Metrics:"
+            cat metrics.json
+          fi
+
+      - name: Upload database and logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: shift_codes-database
+          path: |
+            shift_codes.db
+            bot.log
+            metrics.json
+          retention-days: 30
+
+      - name: Notify on failure
+        if: ${{ failure() && github.event_name == 'schedule' }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+            payload='{"content":"🚨 **SHiFT Bot Failed**\nThe scheduled bot run failed. Check GitHub Actions for details.\n**Time:** '"$(date -u '+%Y-%m-%d %H:%M')"' UTC\n**Logs:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+            curl -sS -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL"
+          fi
