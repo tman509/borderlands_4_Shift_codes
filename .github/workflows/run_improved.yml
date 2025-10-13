@@ -2,7 +2,7 @@ name: Run SHiFT Bot (Improved)
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # Every 30 minutes for better coverage
+    - cron: "0 1 * * *"   # Daily at 7 PM Mountain Time (1 AM UTC)
   workflow_dispatch:
     inputs:
       reset_db:

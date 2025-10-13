@@ -2,7 +2,7 @@ name: Run SHiFT Bot (Simple)
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # Every 30 minutes
+    - cron: "0 1 * * *"   # Daily at 7 PM Mountain Time (1 AM UTC)
   workflow_dispatch:
     inputs:
       test_mode:
