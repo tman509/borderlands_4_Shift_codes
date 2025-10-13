@@ -63,6 +63,18 @@ jobs:
           path: ./old/
           if_no_artifact_found: ignore
 
+      - name: List available files for debugging
+        run: |
+          echo "🔍 Available files:"
+          echo "Current directory:"
+          ls -la
+          echo "Old directory:"
+          ls -la ./old/ 2>/dev/null || echo "No ./old/ directory"
+          echo "Current directory:"
+          ls -la ./current/ 2>/dev/null || echo "No ./current/ directory"
+          echo "All .db files:"
+          find . -name "*.db" -type f 2>/dev/null || echo "No .db files found"
+
       - name: Backup current database
         if: ${{ inputs.backup_current == true }}
         run: |
@@ -81,31 +93,59 @@ jobs:
           # Determine old database path
           if [ -f ./old/shift_codes.db ]; then
             OLD_DB="./old/shift_codes.db"
-          elif [ -f ./shift_codes.db ]; then
-            OLD_DB="./shift_codes.db"
+            echo "📂 Found old database: $OLD_DB"
           else
             echo "❌ No old database found to import"
+            echo "Available files:"
+            find . -name "*.db" -type f 2>/dev/null || echo "No .db files found"
             exit 1
           fi
           
-          # Determine new database path
+          # Check if we have a current database to merge with
           if [ -f ./current/shift_codes.db ]; then
-            NEW_DB="./current/shift_codes.db"
             echo "📥 Merging with existing database"
+            cp ./current/shift_codes.db ./shift_codes_existing.db
+            NEW_DB="./shift_codes_existing.db"
           else
-            NEW_DB="./shift_codes.db"
             echo "📥 Creating new database"
+            NEW_DB="./shift_codes_new.db"
           fi
           
           echo "Old database: $OLD_DB"
           echo "New database: $NEW_DB"
           
-          # Run import
-          python import_old_database.py "$OLD_DB" "$NEW_DB"
+          # Check old database
+          echo "🔍 Checking old database..."
+          python -c "
+          import sqlite3
+          import os
+          
+          if not os.path.exists('$OLD_DB'):
+              print('❌ Old database file not found')
+              exit(1)
+          
+          try:
+              conn = sqlite3.connect('$OLD_DB')
+              cursor = conn.cursor()
+              cursor.execute('SELECT COUNT(*) FROM codes')
+              count = cursor.fetchone()[0]
+              print(f'✅ Old database has {count} codes')
+              conn.close()
+          except Exception as e:
+              print(f'❌ Error reading old database: {e}')
+              exit(1)
+          "
+          
+          # Run import with CI script (no interactive prompts)
+          python import_database_ci.py "$OLD_DB" "$NEW_DB"
           
           # Move result to final location
-          if [ "$NEW_DB" != "./shift_codes.db" ]; then
+          if [ -f "$NEW_DB" ]; then
             mv "$NEW_DB" ./shift_codes.db
+            echo "✅ Database import completed"
+          else
+            echo "❌ Import failed - no output database created"
+            exit 1
           fi
 
       - name: Verify import results

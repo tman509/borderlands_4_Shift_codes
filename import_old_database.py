@@ -170,31 +170,45 @@ def main():
     print("🔄 SHiFT Code Database Import Tool")
     print("=" * 50)
     
+    # Check if running in CI environment
+    is_ci = os.getenv('CI') == 'true' or os.getenv('GITHUB_ACTIONS') == 'true'
+    
     # Get file paths
     if len(sys.argv) > 1:
         old_db_path = sys.argv[1]
     else:
-        old_db_path = input("Enter path to old database (or press Enter for './shift_codes.db'): ").strip()
-        if not old_db_path:
+        if is_ci:
             old_db_path = "./shift_codes.db"
+        else:
+            old_db_path = input("Enter path to old database (or press Enter for './shift_codes.db'): ").strip()
+            if not old_db_path:
+                old_db_path = "./shift_codes.db"
     
     if len(sys.argv) > 2:
         new_db_path = sys.argv[2]
     else:
-        new_db_path = input("Enter path for new database (or press Enter for './shift_codes_new.db'): ").strip()
-        if not new_db_path:
+        if is_ci:
             new_db_path = "./shift_codes_new.db"
+        else:
+            new_db_path = input("Enter path for new database (or press Enter for './shift_codes_new.db'): ").strip()
+            if not new_db_path:
+                new_db_path = "./shift_codes_new.db"
     
     print(f"\n📂 Import Settings:")
     print(f"  Old database: {old_db_path}")
     print(f"  New database: {new_db_path}")
+    print(f"  CI Environment: {is_ci}")
     
     # Check if new database already exists
     if os.path.exists(new_db_path):
-        response = input(f"\n⚠️ New database already exists. Merge with existing data? (y/N): ").strip().lower()
-        if response not in ['y', 'yes']:
-            print("❌ Import cancelled")
-            return 1
+        if is_ci:
+            print(f"\n⚠️ New database already exists. Auto-merging in CI mode...")
+            response = 'y'
+        else:
+            response = input(f"\n⚠️ New database already exists. Merge with existing data? (y/N): ").strip().lower()
+            if response not in ['y', 'yes']:
+                print("❌ Import cancelled")
+                return 1
     
     # Validate old database
     print(f"\n🔍 Checking old database...")
