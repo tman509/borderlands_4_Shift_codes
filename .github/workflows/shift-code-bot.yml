@@ -78,7 +78,7 @@ jobs:
       env:
         DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
-        REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+        REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_SECRET }}
         ENVIRONMENT: production
         LOG_LEVEL: INFO
         DATABASE_URL: sqlite:///data/shift_codes.db
