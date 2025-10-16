@@ -31,6 +31,7 @@ def main():
     
     # Test database migration
     try:
+        print("🔧 Testing database migration...")
         result = subprocess.run([
             sys.executable, "migrate.py", "migrate"
         ], capture_output=True, text=True, timeout=60)

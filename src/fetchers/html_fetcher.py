@@ -10,7 +10,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 from .base import BaseFetcher
-from ..models.content import RawContent, ContentType
+from models.content import RawContent, ContentType
 
 logger = logging.getLogger(__name__)
 

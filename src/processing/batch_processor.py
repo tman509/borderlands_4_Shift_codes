@@ -9,12 +9,12 @@ from dataclasses import dataclass
 from enum import Enum
 import time
 
-from ..models.code import ParsedCode, CodeStatus
-from ..models.content import RawContent
-from ..storage.repositories import CodeRepository, SourceRepository
-from ..processing.parser import CodeParser
-from ..processing.validator import CodeValidator
-from ..processing.deduplication import DeduplicationEngine, DeduplicationResult, DeduplicationAction
+from models.code import ParsedCode, CodeStatus
+from models.content import RawContent
+from storage.repositories import CodeRepository, SourceRepository
+from processing.parser import CodeParser
+from processing.validator import CodeValidator
+from processing.deduplication import DeduplicationEngine, DeduplicationResult, DeduplicationAction
 
 logger = logging.getLogger(__name__)
 

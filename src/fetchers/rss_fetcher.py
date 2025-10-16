@@ -12,7 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from .base import BaseFetcher
-from ..models.content import RawContent
+from models.content import RawContent
 
 logger = logging.getLogger(__name__)
 

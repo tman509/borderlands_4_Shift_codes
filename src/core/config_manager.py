@@ -8,7 +8,7 @@ import logging
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
-from ..models.config import (
+from models.config import (
     Config, SourceConfig, ChannelConfig, NotificationSettings,
     SchedulerConfig, ObservabilityConfig, SourceType, RateLimit
 )

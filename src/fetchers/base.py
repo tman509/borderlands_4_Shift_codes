@@ -12,9 +12,9 @@ from datetime import datetime, timezone
 from urllib.robotparser import RobotFileParser
 from urllib.parse import urljoin, urlparse
 
-from ..models.content import RawContent
-from ..models.config import SourceConfig
-from ..utils.retry import retry_with_backoff
+from models.content import RawContent
+from models.config import SourceConfig
+from utils.retry import retry_with_backoff
 
 logger = logging.getLogger(__name__)
 

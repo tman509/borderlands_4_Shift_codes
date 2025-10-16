@@ -8,8 +8,8 @@ from typing import Iterator, List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 
 from .base import BaseFetcher
-from ..models.content import RawContent, ContentType
-from ..utils.retry import retry_with_backoff
+from models.content import RawContent, ContentType
+from utils.retry import retry_with_backoff
 
 logger = logging.getLogger(__name__)
 

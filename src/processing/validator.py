@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Set, Tuple
 from functools import lru_cache
 
-from ..models.code import ValidationResult, CodeMetadata, ParsedCode
+from models.code import ValidationResult, CodeMetadata, ParsedCode
 
 logger = logging.getLogger(__name__)
 

@@ -8,8 +8,8 @@ from typing import List, Optional, Dict, Any, Tuple, Set
 from datetime import datetime, timezone
 from functools import lru_cache
 
-from ..models.content import RawContent
-from ..models.code import ParsedCode, CodeMetadata
+from models.content import RawContent
+from models.code import ParsedCode, CodeMetadata
 
 logger = logging.getLogger(__name__)
 
