@@ -28,7 +28,7 @@ jobs:
         ENVIRONMENT: production
     
     - name: Save database
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: database
         path: data/shift_codes.db

@@ -59,7 +59,7 @@ jobs:
         DATABASE_URL: sqlite:///data/shift_codes.db
     
     - name: Upload database artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: shift-codes-database
