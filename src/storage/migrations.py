@@ -5,8 +5,9 @@ Database migration management for the Shift Code Bot.
 import sqlite3
 import logging
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,41 @@ class MigrationManager:
         self.old_db_path = old_db_path
         self.new_database = new_database
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+    
+    def check_old_database_exists(self) -> bool:
+        """Check if old database file exists."""
+        return Path(self.old_db_path).exists()
+    
+    def get_old_database_info(self) -> Dict[str, Any]:
+        """Get information about the old database."""
+        if not self.check_old_database_exists():
+            return {"exists": False}
+        
+        try:
+            conn = sqlite3.connect(self.old_db_path)
+            conn.row_factory = sqlite3.Row
+            
+            # Get table info
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in cursor.fetchall()]
+            
+            info = {
+                "exists": True,
+                "tables": tables,
+                "file_size": Path(self.old_db_path).stat().st_size
+            }
+            
+            # Get record counts if tables exist
+            if "codes" in tables:
+                cursor = conn.execute("SELECT COUNT(*) FROM codes")
+                info["code_count"] = cursor.fetchone()[0]
+            
+            conn.close()
+            return info
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get old database info: {e}")
+            return {"exists": True, "error": str(e)}
     
     def migrate_from_old_schema(self) -> Dict[str, Any]:
         """Migrate data from old database schema to new schema."""

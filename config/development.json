@@ -1,0 +1,59 @@
+{
+  "environment": "development",
+  "debug": true,
+  "timezone": "UTC",
+  "database_url": "sqlite:///dev_shift_codes.db",
+  
+  "sources": [
+    {
+      "id": 1,
+      "name": "Test HTML Source",
+      "url": "https://httpbin.org/html",
+      "type": "html",
+      "enabled": false,
+      "parser_hints": {
+        "selectors": ["body"],
+        "fallback_regex": true,
+        "max_pages": 1
+      },
+      "rate_limit": {
+        "requests_per_minute": 60,
+        "delay_between_requests": 1.0,
+        "burst_limit": 10
+      }
+    }
+  ],
+  
+  "discord_channels": [
+    {
+      "id": "dev_channel",
+      "name": "Development Testing",
+      "webhook_url": "${DISCORD_WEBHOOK_URL}",
+      "enabled": false,
+      "message_template": "[DEV] {code} - {reward_type}",
+      "source_filters": []
+    }
+  ],
+  
+  "notification_settings": {
+    "max_codes_per_notification": 3,
+    "enable_expiration_reminders": false,
+    "reminder_hours_before": 12,
+    "rate_limit_delay": 0.5,
+    "max_retries": 2
+  },
+  
+  "scheduler_config": {
+    "cron_schedule": "*/5 * * * *",
+    "enable_manual_trigger": true,
+    "max_execution_time": 120
+  },
+  
+  "observability_config": {
+    "log_level": "DEBUG",
+    "log_format": "text",
+    "metrics_enabled": true,
+    "health_check_enabled": true,
+    "alert_webhook_url": null
+  }
+}

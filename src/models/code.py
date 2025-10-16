@@ -5,9 +5,12 @@ Code-related data models for the Shift Code Bot.
 import re
 import json
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, TYPE_CHECKING
 from datetime import datetime, timezone
 from enum import Enum
+
+if TYPE_CHECKING:
+    from .content import ParseContext
 
 
 class CodeStatus(Enum):
@@ -150,16 +153,49 @@ class ParsedCode:
     
     def normalize_code(self) -> str:
         """Normalize the code to canonical format."""
-        clean_code = re.sub(r'[^A-Z0-9]', '', self.code_display.upper())
+        return self._normalize_code_string(self.code_display)
+    
+    @staticmethod
+    def _normalize_code_string(code: str) -> str:
+        """Static method to normalize any code string."""
+        if not code:
+            return ""
         
-        if len(clean_code) == 25:  # 5x5 format
+        # Remove all non-alphanumeric characters and convert to uppercase
+        clean_code = re.sub(r'[^A-Z0-9]', '', code.upper())
+        
+        # Format based on length
+        if len(clean_code) == 25:  # 5x5 format (most common)
             return '-'.join([clean_code[i:i+5] for i in range(0, 25, 5)])
         elif len(clean_code) == 20:  # 4x5 format
             return '-'.join([clean_code[i:i+4] for i in range(0, 20, 4)])
         elif len(clean_code) == 16:  # 4x4 format
             return '-'.join([clean_code[i:i+4] for i in range(0, 16, 4)])
+        elif len(clean_code) == 15:  # 3x5 format (rare)
+            return '-'.join([clean_code[i:i+3] for i in range(0, 15, 3)])
         else:
+            # Return as-is if doesn't match known patterns
             return clean_code
+    
+    def validate_format(self) -> bool:
+        """Validate that the code matches expected format patterns."""
+        return self._is_valid_code_format(self.code_canonical)
+    
+    @staticmethod
+    def _is_valid_code_format(code: str) -> bool:
+        """Static method to validate code format."""
+        if not code:
+            return False
+        
+        # Valid patterns for Shift Codes
+        patterns = [
+            r'^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$',  # 5x5
+            r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$',  # 4x5
+            r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$',              # 4x4
+            r'^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}$'   # 3x5
+        ]
+        
+        return any(re.match(pattern, code) for pattern in patterns)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert parsed code to dictionary for serialization."""

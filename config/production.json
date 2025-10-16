@@ -1,0 +1,94 @@
+{
+  "environment": "production",
+  "debug": false,
+  "timezone": "UTC",
+  "database_url": "sqlite:///data/shift_codes.db",
+  
+  "sources": [
+    {
+      "id": 1,
+      "name": "Gearbox Official Twitter",
+      "url": "https://twitter.com/GearboxOfficial",
+      "type": "html",
+      "enabled": true,
+      "parser_hints": {
+        "selectors": [".tweet-text", ".content"],
+        "fallback_regex": true,
+        "max_pages": 3
+      },
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "delay_between_requests": 2.0,
+        "burst_limit": 5
+      }
+    },
+    {
+      "id": 2,
+      "name": "Borderlands Reddit",
+      "url": "https://www.reddit.com/r/borderlands3",
+      "type": "reddit",
+      "enabled": false,
+      "parser_hints": {
+        "subreddit": "borderlands3",
+        "post_limit": 25,
+        "include_comments": true,
+        "sort_method": "new"
+      },
+      "rate_limit": {
+        "requests_per_minute": 20,
+        "delay_between_requests": 3.0,
+        "burst_limit": 3
+      }
+    },
+    {
+      "id": 3,
+      "name": "Borderlands Official Site",
+      "url": "https://borderlands.com/en-US/news/",
+      "type": "html",
+      "enabled": true,
+      "parser_hints": {
+        "selectors": [".news-content", ".article-body"],
+        "fallback_regex": true,
+        "max_pages": 2
+      },
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "delay_between_requests": 2.0,
+        "burst_limit": 5
+      }
+    }
+  ],
+  
+  "discord_channels": [
+    {
+      "id": "main_channel",
+      "name": "Main Announcements",
+      "webhook_url": "${DISCORD_WEBHOOK_URL}",
+      "enabled": true,
+      "message_template": null,
+      "source_filters": []
+    }
+  ],
+  
+  "notification_settings": {
+    "max_codes_per_notification": 5,
+    "enable_expiration_reminders": true,
+    "reminder_hours_before": 24,
+    "rate_limit_delay": 1.0,
+    "max_retries": 3
+  },
+  
+  "scheduler_config": {
+    "cron_schedule": "*/10 * * * *",
+    "enable_manual_trigger": true,
+    "max_execution_time": 300
+  },
+  
+  "observability_config": {
+    "log_level": "INFO",
+    "log_format": "json",
+    "metrics_enabled": true,
+    "health_check_enabled": true,
+    "alert_webhook_url": "${ALERT_WEBHOOK_URL}"
+  }
+}

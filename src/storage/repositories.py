@@ -221,6 +221,102 @@ class CodeRepository(BaseRepository):
             cursor = conn.execute(query)
             return [self._row_to_parsed_code(row) for row in cursor.fetchall()]
     
+    def create_codes_batch(self, codes: List[ParsedCode]) -> List[int]:
+        """Create multiple codes in a batch operation."""
+        if not codes:
+            return []
+        
+        created_ids = []
+        
+        with self.database.get_connection() as conn:
+            try:
+                for code in codes:
+                    try:
+                        cursor = conn.execute("""
+                            INSERT INTO codes (
+                                code_canonical, code_display, reward_type, platforms,
+                                expires_at_utc, first_seen_at, last_updated_at,
+                                source_id, status, confidence_score, context, metadata
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            code.code_canonical,
+                            code.code_display,
+                            code.reward_type,
+                            json.dumps(code.platforms),
+                            code.expires_at.isoformat() if code.expires_at else None,
+                            code.first_seen_at.isoformat() if code.first_seen_at else datetime.now(timezone.utc).isoformat(),
+                            code.last_updated_at.isoformat() if code.last_updated_at else datetime.now(timezone.utc).isoformat(),
+                            code.source_id,
+                            code.status.value,
+                            code.confidence_score,
+                            code.context,
+                            json.dumps(code.metadata.to_dict())
+                        ))
+                        
+                        created_ids.append(cursor.lastrowid)
+                        
+                    except sqlite3.IntegrityError as e:
+                        if "UNIQUE constraint failed" in str(e):
+                            # Code already exists, get its ID
+                            existing_code = self.get_code_by_canonical(code.code_canonical)
+                            if existing_code:
+                                created_ids.append(existing_code.id)
+                            continue
+                        raise
+                
+                conn.commit()
+                self.logger.debug(f"Created {len(created_ids)} codes in batch")
+                return created_ids
+                
+            except Exception as e:
+                conn.rollback()
+                self.logger.error(f"Failed to create codes batch: {e}")
+                raise
+    
+    def update_codes_batch(self, codes: List[ParsedCode]) -> int:
+        """Update multiple codes in a batch operation."""
+        if not codes:
+            return 0
+        
+        updated_count = 0
+        
+        with self.database.get_connection() as conn:
+            try:
+                for code in codes:
+                    if not code.id:
+                        continue
+                    
+                    cursor = conn.execute("""
+                        UPDATE codes SET
+                            code_display = ?, reward_type = ?, platforms = ?,
+                            expires_at_utc = ?, last_updated_at = ?, status = ?,
+                            confidence_score = ?, context = ?, metadata = ?
+                        WHERE id = ?
+                    """, (
+                        code.code_display,
+                        code.reward_type,
+                        json.dumps(code.platforms),
+                        code.expires_at.isoformat() if code.expires_at else None,
+                        datetime.now(timezone.utc).isoformat(),
+                        code.status.value,
+                        code.confidence_score,
+                        code.context,
+                        json.dumps(code.metadata.to_dict()),
+                        code.id
+                    ))
+                    
+                    if cursor.rowcount > 0:
+                        updated_count += 1
+                
+                conn.commit()
+                self.logger.debug(f"Updated {updated_count} codes in batch")
+                return updated_count
+                
+            except Exception as e:
+                conn.rollback()
+                self.logger.error(f"Failed to update codes batch: {e}")
+                raise
+    
     def get_code_stats(self) -> Dict[str, Any]:
         """Get code statistics."""
         with self.database.get_connection() as conn:
@@ -512,6 +608,54 @@ class AnnouncementRepository(BaseRepository):
             
             return [dict(row) for row in cursor.fetchall()]
     
+    def get_announcements_for_channel(self, channel_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get announcements for a specific channel."""
+        with self.database.get_connection() as conn:
+            query = """
+                SELECT a.*, c.code_display, c.reward_type 
+                FROM announcements a
+                JOIN codes c ON a.code_id = c.id
+                WHERE a.channel_id = ? 
+                ORDER BY a.announced_at DESC
+            """
+            params = [channel_id]
+            
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+            
+            cursor = conn.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def create_threaded_update(self, original_announcement_id: int, code_id: int, channel_id: str, message_id: Optional[str] = None) -> int:
+        """Create a threaded update announcement."""
+        with self.database.get_connection() as conn:
+            try:
+                cursor = conn.execute("""
+                    INSERT INTO announcements (
+                        code_id, channel_id, message_id, announced_at, 
+                        update_of_announcement_id, status
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    code_id,
+                    channel_id,
+                    message_id,
+                    datetime.now(timezone.utc).isoformat(),
+                    original_announcement_id,
+                    "sent"
+                ))
+                
+                announcement_id = cursor.lastrowid
+                conn.commit()
+                
+                self.logger.debug(f"Created threaded update {announcement_id} for announcement {original_announcement_id}")
+                return announcement_id
+                
+            except Exception as e:
+                conn.rollback()
+                self.logger.error(f"Failed to create threaded update: {e}")
+                raise
+    
     def update_announcement_status(self, announcement_id: int, status: str, error_message: Optional[str] = None) -> None:
         """Update announcement status."""
         with self.database.get_connection() as conn:
@@ -528,3 +672,239 @@ class AnnouncementRepository(BaseRepository):
                 conn.rollback()
                 self.logger.error(f"Failed to update announcement {announcement_id}: {e}")
                 raise
+    
+    def get_failed_announcements(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get failed announcements for retry."""
+        with self.database.get_connection() as conn:
+            query = """
+                SELECT a.*, c.code_display 
+                FROM announcements a
+                JOIN codes c ON a.code_id = c.id
+                WHERE a.status = 'failed' AND a.retry_count < 3
+                ORDER BY a.announced_at
+            """
+            
+            if limit:
+                query += f" LIMIT {limit}"
+            
+            cursor = conn.execute(query)
+            return [dict(row) for row in cursor.fetchall()]
+
+
+class CrawlHistoryRepository(BaseRepository):
+    """Repository for crawl history tracking."""
+    
+    def start_crawl(self, source_id: int) -> int:
+        """Start a new crawl session and return its ID."""
+        with self.database.get_connection() as conn:
+            try:
+                cursor = conn.execute("""
+                    INSERT INTO crawl_history (
+                        source_id, started_at, status
+                    ) VALUES (?, ?, ?)
+                """, (
+                    source_id,
+                    datetime.now(timezone.utc).isoformat(),
+                    "running"
+                ))
+                
+                crawl_id = cursor.lastrowid
+                conn.commit()
+                
+                self.logger.debug(f"Started crawl session {crawl_id} for source {source_id}")
+                return crawl_id
+                
+            except Exception as e:
+                conn.rollback()
+                self.logger.error(f"Failed to start crawl for source {source_id}: {e}")
+                raise
+    
+    def complete_crawl(self, crawl_id: int, codes_found: int, error_message: Optional[str] = None) -> None:
+        """Complete a crawl session."""
+        with self.database.get_connection() as conn:
+            try:
+                status = "completed" if error_message is None else "failed"
+                
+                # Calculate execution time
+                cursor = conn.execute("SELECT started_at FROM crawl_history WHERE id = ?", (crawl_id,))
+                row = cursor.fetchone()
+                
+                execution_time = 0.0
+                if row:
+                    started_at = datetime.fromisoformat(row[0])
+                    completed_at = datetime.now(timezone.utc)
+                    execution_time = (completed_at - started_at).total_seconds()
+                
+                conn.execute("""
+                    UPDATE crawl_history SET
+                        completed_at = ?, status = ?, codes_found = ?,
+                        error_message = ?, execution_time_seconds = ?
+                    WHERE id = ?
+                """, (
+                    datetime.now(timezone.utc).isoformat(),
+                    status,
+                    codes_found,
+                    error_message,
+                    execution_time,
+                    crawl_id
+                ))
+                
+                conn.commit()
+                
+                self.logger.debug(f"Completed crawl session {crawl_id}: {status}, {codes_found} codes")
+                
+            except Exception as e:
+                conn.rollback()
+                self.logger.error(f"Failed to complete crawl {crawl_id}: {e}")
+                raise
+    
+    def get_recent_crawls(self, source_id: Optional[int] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get recent crawl history."""
+        with self.database.get_connection() as conn:
+            if source_id:
+                query = """
+                    SELECT ch.*, s.name as source_name
+                    FROM crawl_history ch
+                    JOIN sources s ON ch.source_id = s.id
+                    WHERE ch.source_id = ?
+                    ORDER BY ch.started_at DESC
+                    LIMIT ?
+                """
+                params = [source_id, limit]
+            else:
+                query = """
+                    SELECT ch.*, s.name as source_name
+                    FROM crawl_history ch
+                    JOIN sources s ON ch.source_id = s.id
+                    ORDER BY ch.started_at DESC
+                    LIMIT ?
+                """
+                params = [limit]
+            
+            cursor = conn.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def get_crawl_stats(self, hours: int = 24) -> Dict[str, Any]:
+        """Get crawl statistics for the last N hours."""
+        with self.database.get_connection() as conn:
+            stats = {}
+            
+            # Total crawls
+            cursor = conn.execute("""
+                SELECT COUNT(*) FROM crawl_history 
+                WHERE started_at > datetime('now', '-{} hours')
+            """.format(hours))
+            stats["total_crawls"] = cursor.fetchone()[0]
+            
+            # Successful crawls
+            cursor = conn.execute("""
+                SELECT COUNT(*) FROM crawl_history 
+                WHERE started_at > datetime('now', '-{} hours')
+                AND status = 'completed'
+            """.format(hours))
+            stats["successful_crawls"] = cursor.fetchone()[0]
+            
+            # Failed crawls
+            cursor = conn.execute("""
+                SELECT COUNT(*) FROM crawl_history 
+                WHERE started_at > datetime('now', '-{} hours')
+                AND status = 'failed'
+            """.format(hours))
+            stats["failed_crawls"] = cursor.fetchone()[0]
+            
+            # Total codes found
+            cursor = conn.execute("""
+                SELECT COALESCE(SUM(codes_found), 0) FROM crawl_history 
+                WHERE started_at > datetime('now', '-{} hours')
+                AND status = 'completed'
+            """.format(hours))
+            stats["total_codes_found"] = cursor.fetchone()[0]
+            
+            # Average execution time
+            cursor = conn.execute("""
+                SELECT AVG(execution_time_seconds) FROM crawl_history 
+                WHERE started_at > datetime('now', '-{} hours')
+                AND status = 'completed'
+                AND execution_time_seconds IS NOT NULL
+            """.format(hours))
+            avg_time = cursor.fetchone()[0]
+            stats["avg_execution_time"] = round(avg_time, 2) if avg_time else 0.0
+            
+            return stats
+
+
+class MetricsRepository(BaseRepository):
+    """Repository for metrics storage and retrieval."""
+    
+    def record_metric(self, metric_name: str, metric_value: float, tags: Optional[Dict[str, Any]] = None, source_id: Optional[int] = None) -> None:
+        """Record a metric value."""
+        with self.database.get_connection() as conn:
+            try:
+                conn.execute("""
+                    INSERT INTO metrics (
+                        metric_name, metric_value, tags, source_id, timestamp
+                    ) VALUES (?, ?, ?, ?, ?)
+                """, (
+                    metric_name,
+                    metric_value,
+                    json.dumps(tags) if tags else None,
+                    source_id,
+                    datetime.now(timezone.utc).isoformat()
+                ))
+                
+                conn.commit()
+                
+            except Exception as e:
+                conn.rollback()
+                self.logger.error(f"Failed to record metric {metric_name}: {e}")
+                raise
+    
+    def get_metrics(self, metric_name: str, hours: int = 24, source_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get metrics for the specified time period."""
+        with self.database.get_connection() as conn:
+            if source_id:
+                query = """
+                    SELECT * FROM metrics 
+                    WHERE metric_name = ? AND source_id = ?
+                    AND timestamp > datetime('now', '-{} hours')
+                    ORDER BY timestamp DESC
+                """.format(hours)
+                params = [metric_name, source_id]
+            else:
+                query = """
+                    SELECT * FROM metrics 
+                    WHERE metric_name = ?
+                    AND timestamp > datetime('now', '-{} hours')
+                    ORDER BY timestamp DESC
+                """.format(hours)
+                params = [metric_name]
+            
+            cursor = conn.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def get_metric_summary(self, metric_name: str, hours: int = 24) -> Dict[str, Any]:
+        """Get summary statistics for a metric."""
+        with self.database.get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT 
+                    COUNT(*) as count,
+                    AVG(metric_value) as avg,
+                    MIN(metric_value) as min,
+                    MAX(metric_value) as max,
+                    SUM(metric_value) as sum
+                FROM metrics 
+                WHERE metric_name = ?
+                AND timestamp > datetime('now', '-{} hours')
+            """.format(hours), (metric_name,))
+            
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "count": row[0],
+                    "average": round(row[1], 2) if row[1] else 0.0,
+                    "minimum": row[2] if row[2] else 0.0,
+                    "maximum": row[3] if row[3] else 0.0,
+                    "total": row[4] if row[4] else 0.0
+                }
+            
+            return {"count": 0, "average": 0.0, "minimum": 0.0, "maximum": 0.0, "total": 0.0}

@@ -35,6 +35,65 @@ class SourceConfig:
     rate_limit: RateLimit = field(default_factory=RateLimit)
     last_crawl_at: Optional[str] = None
     last_content_hash: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    
+    def __post_init__(self):
+        """Validate source configuration after initialization."""
+        if not self.name or not self.name.strip():
+            raise ValueError("Source name cannot be empty")
+        
+        if not self.url or not self.url.strip():
+            raise ValueError("Source URL cannot be empty")
+        
+        if self.id <= 0:
+            raise ValueError("Source ID must be positive")
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "url": self.url,
+            "type": self.type.value,
+            "enabled": self.enabled,
+            "parser_hints": self.parser_hints,
+            "rate_limit": {
+                "requests_per_minute": self.rate_limit.requests_per_minute,
+                "delay_between_requests": self.rate_limit.delay_between_requests,
+                "burst_limit": self.rate_limit.burst_limit
+            },
+            "last_crawl_at": self.last_crawl_at,
+            "last_content_hash": self.last_content_hash,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'SourceConfig':
+        """Create from dictionary."""
+        rate_limit = RateLimit()
+        if "rate_limit" in data:
+            rl_data = data["rate_limit"]
+            rate_limit = RateLimit(
+                requests_per_minute=rl_data.get("requests_per_minute", 60),
+                delay_between_requests=rl_data.get("delay_between_requests", 1.0),
+                burst_limit=rl_data.get("burst_limit", 10)
+            )
+        
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            url=data["url"],
+            type=SourceType(data["type"]),
+            enabled=data.get("enabled", True),
+            parser_hints=data.get("parser_hints", {}),
+            rate_limit=rate_limit,
+            last_crawl_at=data.get("last_crawl_at"),
+            last_content_hash=data.get("last_content_hash"),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at")
+        )
 
 
 @dataclass
