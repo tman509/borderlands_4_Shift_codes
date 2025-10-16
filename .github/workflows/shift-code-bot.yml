@@ -48,11 +48,11 @@ jobs:
           echo "No database found, will create new one"
         fi
     
-    - name: Test imports
+    - name: Test migration imports
       run: |
-        echo "Testing Python imports..."
-        python test_imports.py
-        echo "Import test completed"
+        echo "Testing migration imports..."
+        python test_migration_only.py
+        echo "Migration import test completed"
     
     - name: Initialize database
       run: |

@@ -4,7 +4,7 @@ Data models and core data structures for the Shift Code Bot.
 
 from .config import Config, SourceConfig, ChannelConfig, NotificationSettings, SourceType
 from .code import ParsedCode, CodeMetadata, ValidationResult, CodeStatus
-from .content import RawContent, FormattedMessage
+from .content import RawContent, ParseResult, ParseContext
 from .validators import ConfigValidator, CodeValidator, MetadataValidator, validate_all
 
 __all__ = [
@@ -18,7 +18,8 @@ __all__ = [
     "ValidationResult",
     "CodeStatus",
     "RawContent",
-    "FormattedMessage",
+    "ParseResult",
+    "ParseContext",
     "ConfigValidator",
     "CodeValidator",
     "MetadataValidator",
