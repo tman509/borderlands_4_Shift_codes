@@ -399,6 +399,10 @@ def main():
                     print(f"  Errors: {len(metrics['errors'])}")
                     for error in metrics['errors']:
                         print(f"    - {error}")
+            
+            # Exit successfully after single run (even if there were errors)
+            # Errors in single run mode are typically expected (no new codes, etc.)
+            sys.exit(0)
         
         elif args.maintenance:
             # Maintenance mode
