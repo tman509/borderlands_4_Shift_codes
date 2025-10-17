@@ -6,6 +6,16 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
     # Allow manual triggering
+    inputs:
+      test_discord:
+        description: 'Send Discord test message?'
+        required: false
+        type: boolean
+        default: false
+      test_message:
+        description: 'Custom test message'
+        required: false
+        default: 'Test message from Shift Code Bot workflow'
 
 jobs:
   run-bot:
@@ -52,6 +62,15 @@ jobs:
           echo "database-exists=false" >> $GITHUB_OUTPUT
           echo "No database found, will create new one"
         fi
+    
+    - name: Test Discord webhook (optional)
+      if: ${{ inputs.test_discord == true }}
+      run: |
+        echo "Testing Discord webhook..."
+        python test_discord.py
+        echo "Discord test completed"
+      env:
+        DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
     
     - name: Test migration imports
       run: |
