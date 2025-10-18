@@ -56,6 +56,58 @@
         "delay_between_requests": 2.0,
         "burst_limit": 5
       }
+    },
+    {
+      "id": 4,
+      "name": "2K Games Twitter",
+      "url": "https://twitter.com/2K",
+      "type": "html",
+      "enabled": true,
+      "parser_hints": {
+        "selectors": [".tweet-text", ".content"],
+        "fallback_regex": true,
+        "max_pages": 2
+      },
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "delay_between_requests": 2.0,
+        "burst_limit": 5
+      }
+    },
+    {
+      "id": 5,
+      "name": "Randy Pitchford Twitter",
+      "url": "https://twitter.com/DuvalMagic",
+      "type": "html",
+      "enabled": true,
+      "parser_hints": {
+        "selectors": [".tweet-text", ".content"],
+        "fallback_regex": true,
+        "max_pages": 2
+      },
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "delay_between_requests": 2.0,
+        "burst_limit": 5
+      }
+    },
+    {
+      "id": 6,
+      "name": "Main Borderlands Reddit",
+      "url": "https://www.reddit.com/r/Borderlands",
+      "type": "reddit",
+      "enabled": false,
+      "parser_hints": {
+        "subreddit": "Borderlands",
+        "post_limit": 25,
+        "include_comments": true,
+        "sort_method": "new"
+      },
+      "rate_limit": {
+        "requests_per_minute": 20,
+        "delay_between_requests": 3.0,
+        "burst_limit": 3
+      }
     }
   ],
   
