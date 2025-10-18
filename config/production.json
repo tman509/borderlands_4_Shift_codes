@@ -27,7 +27,7 @@
       "name": "Borderlands Reddit",
       "url": "https://www.reddit.com/r/borderlands3",
       "type": "reddit",
-      "enabled": false,
+      "enabled": true,
       "parser_hints": {
         "subreddit": "borderlands3",
         "post_limit": 25,
@@ -96,7 +96,7 @@
       "name": "Main Borderlands Reddit",
       "url": "https://www.reddit.com/r/Borderlands",
       "type": "reddit",
-      "enabled": false,
+      "enabled": true,
       "parser_hints": {
         "subreddit": "Borderlands",
         "post_limit": 25,
@@ -107,6 +107,57 @@
         "requests_per_minute": 20,
         "delay_between_requests": 3.0,
         "burst_limit": 3
+      }
+    },
+    {
+      "id": 7,
+      "name": "IGN Borderlands 4 SHiFT Codes",
+      "url": "https://www.ign.com/wikis/borderlands-4/Borderlands_4_SHiFT_Codes",
+      "type": "html",
+      "enabled": true,
+      "parser_hints": {
+        "selectors": [".wiki-content", ".article-content", ".code-list", ".shift-code", "code", ".highlight"],
+        "fallback_regex": true,
+        "max_pages": 1
+      },
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "delay_between_requests": 2.0,
+        "burst_limit": 5
+      }
+    },
+    {
+      "id": 8,
+      "name": "Game8 Borderlands 4 Codes",
+      "url": "https://game8.co/games/Borderlands-4/archives/548406",
+      "type": "html",
+      "enabled": true,
+      "parser_hints": {
+        "selectors": [".article-body", ".content", ".code-section", ".shift-codes", "code", ".highlight"],
+        "fallback_regex": true,
+        "max_pages": 1
+      },
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "delay_between_requests": 2.0,
+        "burst_limit": 5
+      }
+    },
+    {
+      "id": 9,
+      "name": "GamesRadar Borderlands 4 SHiFT Codes",
+      "url": "https://www.gamesradar.com/games/borderlands/borderlands-4-shift-codes-golden-keys/",
+      "type": "html",
+      "enabled": true,
+      "parser_hints": {
+        "selectors": [".article-body", ".entry-content", ".code-list", ".shift-code", "code", ".highlight"],
+        "fallback_regex": true,
+        "max_pages": 1
+      },
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "delay_between_requests": 2.0,
+        "burst_limit": 5
       }
     }
   ],
