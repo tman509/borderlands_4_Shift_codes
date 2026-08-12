@@ -59,12 +59,13 @@ jobs:
         if: ${{ inputs.test_webhook == true }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TEST_MESSAGE: ${{ inputs.test_message }}
         run: |
           if [ -z "$DISCORD_WEBHOOK_URL" ]; then
             echo "No DISCORD_WEBHOOK_URL secret set."
             exit 0
           fi
-          payload=$(printf '{"content":"%s"}' "${{ inputs.test_message }}")
+          payload=$(jq -n --arg content "$TEST_MESSAGE" '{content: $content}')
           curl -sS -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK_URL"
 
       - name: Run bot
@@ -85,6 +86,7 @@ jobs:
           python main.py
 
       - name: Upload updated DB
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: shift_codes-database
